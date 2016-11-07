@@ -57,6 +57,13 @@ module FeedjiraExtension
     value :content
   end
 
+  class ITunesRssOwner < Author
+    include SAXMachine
+
+    element :'itunes:name', as: :name
+    element :'itunes:email', as: :email
+  end
+
   class Enclosure
     include SAXMachine
 
@@ -264,6 +271,32 @@ module FeedjiraExtension
     end
   end
 
+  class ITunesCategory
+    include SAXMachine
+
+    attribute :text
+
+    elements :"itunes:category", as: :itunes_categories, class: ITunesCategory
+
+    def empty?
+      subcategories.empty?
+    end
+
+    def subcategories(categories = [])
+      if subcategory = text.presence
+        categories << subcategory
+        if subcategory = itunes_categories.first
+          subcategory.subcategories(categories)
+        end
+        categories
+      end
+    end
+
+    def to_json(options = nil)
+      subcategories.to_json
+    end
+  end
+
   module FeedExtensions
     def self.included(mod)
       mod.module_exec do
@@ -289,6 +322,24 @@ module FeedjiraExtension
 
           def copyright
             @copyright || super
+          end
+
+          if /ITunes/ === name
+            sax_config.top_level_elements['itunes:category'].clear
+            sax_config.collection_elements['itunes:owner'].clear
+
+            elements :"itunes:category", as: :_itunes_categories, class: ITunesCategory
+            elements :"itunes:owner",    as: :_itunes_owners,     class: ITunesRssOwner
+
+            element  :"itunes:complete", as: :itunes_complete
+
+            def itunes_categories
+              _itunes_categories.reject(&:empty?)
+            end
+
+            def itunes_owners
+              _itunes_owners.reject(&:empty?)
+            end
           end
         end
 
